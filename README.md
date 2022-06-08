@@ -1,5 +1,5 @@
 # Videos-to-HDF5
-
+Coverts video files from .avi/.mp4 to HDF5. This code runs on Python2. 
 
 ## Installation
 `pip2 install -r requirements.txt`
