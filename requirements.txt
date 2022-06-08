@@ -1,8 +1,8 @@
-!pip2 install torchvision==0.2.0
-!pip2 install torch==1.2.0
-!pip2 install h5py
-!pip2 install hub==0.1.0
-!pip2 install pillow
-!pip2 install tqdm
-!pip2 install weave
-!pip2 install opencv-python==4.2.0.32
+torchvision==0.2.0
+torch==1.2.0
+h5py
+hub==0.1.0
+pillow
+tqdm
+weave
+opencv-python==4.2.0.32
