@@ -1,3 +1,3 @@
-from CNN import *
-from DSN import *
-from RL import *
+from .CNN import *
+from .DSN import *
+from .RL import *

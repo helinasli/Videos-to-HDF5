@@ -12,12 +12,10 @@ from PIL import Image
 from torchvision import transforms
 import torch
 sys.path.append('../')
-sys.path.append('/content/drive/MyDrive/video_summarization-master')
-sys.path.append('/content/drive/MyDrive/video_summarization-master/utils/KTS1')
 
 import networks
 from networks.CNN import ResNet
-from cpd_auto import cpd_auto
+from KTS1.cpd_auto import cpd_auto
 from tqdm import tqdm
 #from googlenet_pytorch import GoogLeNet
 import math
@@ -35,7 +33,8 @@ class Generate_Dataset:
         if self.model_name=="resnet":
             self.model=ResNet()
         else :
-            self.model=GoogLeNet()
+            #self.model=GoogLeNet()
+            pass
         self.dataset = {}
         self.video_list = []
         self.video_path = ''
