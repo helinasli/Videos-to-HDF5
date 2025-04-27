@@ -58,12 +58,20 @@ class Generate_Dataset:
 
 
     def _extract_feature(self, frame):
-
+        # Preprocessing
+        frame = cv2.resize(frame, (224, 224))
+        if not hasattr(self, 'prev_features'):
+            self.prev_features = None
+            
         if self.model_name=="resnet":
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (224, 224))
             res_pool5 = self.model(frame)
             frame_feat = res_pool5.cpu().data.numpy().flatten()
+            
+            # Lighter temporal smoothing (0.9 instead of 0.7)
+            if self.prev_features is not None:
+                frame_feat = 0.9 * frame_feat + 0.1 * self.prev_features
+            self.prev_features = frame_feat
         else:
             preprocess = transforms.Compose([
                 transforms.Resize(256),
@@ -85,34 +93,63 @@ class Generate_Dataset:
             with torch.no_grad():
                 frame_feat = self.model(input_batch)
                 frame_feat=frame_feat[0]
+            frame_feat = frame_feat.cpu().data.numpy().flatten()
+        #print('frame feat', frame_feat.shape)
         return frame_feat
 
-
-        
-
+    # CHANGE POINTS HERE -> cpd_auto don't work
+    
     def _get_change_points(self, video_feat, n_frame, fps):
         n = n_frame / fps
         m = int(math.ceil(n/2.0))
+        
+        # Stage 1: Get initial change points with moderate parameters
         K = np.dot(video_feat, video_feat.T)
-        change_points, _ = cpd_auto(K, m, 1)
-        change_points = np.concatenate(([0], change_points, [n_frame-1]))
-
+        lmin = int(fps * 2)  # 2 seconds minimum
+        vmax = 0.6  # Moderate penalty
+        
+        change_points, scores = cpd_auto(K, m, vmax, lmin)
+        
+        # Stage 2: Filter change points based on their significance
+        if len(change_points) > 0:
+            # Calculate segment differences
+            diffs = []
+            change_points = np.concatenate(([0], change_points, [n_frame-1]))
+            
+            for i in range(len(change_points)-1):
+                start = change_points[i]
+                end = change_points[i+1]
+                
+                # Calculate feature difference between segments
+                if i < len(change_points)-2:
+                    next_end = change_points[i+2]
+                    curr_feat = np.mean(video_feat[start:end], axis=0)
+                    next_feat = np.mean(video_feat[end:next_end], axis=0)
+                    diff = np.linalg.norm(curr_feat - next_feat)
+                    diffs.append(diff)
+            
+            if diffs:
+                # Keep only significant changes (above mean difference)
+                threshold = np.mean(diffs) + 0.5 * np.std(diffs)
+                significant_changes = [0]  # Always keep first point
+                
+                for i, diff in enumerate(diffs):
+                    if diff > threshold:
+                        significant_changes.append(change_points[i+1])
+                
+                significant_changes.append(n_frame-1)  # Always keep last point
+                change_points = np.array(significant_changes)
+        
+        # Format output
         temp_change_points = []
         for idx in range(len(change_points)-1):
             segment = [change_points[idx], change_points[idx+1]-1]
             if idx == len(change_points)-2:
                 segment = [change_points[idx], change_points[idx+1]]
-
             temp_change_points.append(segment)
-        change_points = np.array(list(temp_change_points))
+        
+        return np.array(temp_change_points)
 
-        temp_n_frame_per_seg = []
-        for change_points_idx in range(len(change_points)):
-            n_frame = change_points[change_points_idx][1] - change_points[change_points_idx][0]
-            temp_n_frame_per_seg.append(n_frame)
-        n_frame_per_seg = np.array(list(temp_n_frame_per_seg))
-
-        return change_points, n_frame_per_seg
 
     # TODO : save dataset
     def _save_dataset(self):
@@ -165,7 +202,7 @@ class Generate_Dataset:
 
             video_capture.release()
 
-            change_points, n_frame_per_seg = self._get_change_points(video_feat, n_frames, fps)
+            change_points = self._get_change_points(video_feat, n_frames, fps)
 
             # self.dataset['video_{}'.format(video_idx+1)]['frames'] = list(frame_list)
             # self.dataset['video_{}'.format(video_idx+1)]['features'] = list(video_feat)
@@ -181,7 +218,6 @@ class Generate_Dataset:
             self.h5_file['video_{}'.format(video_idx+1)]['n_frames'] = n_frames
             self.h5_file['video_{}'.format(video_idx+1)]['fps'] = fps
             self.h5_file['video_{}'.format(video_idx+1)]['change_points'] = change_points
-            self.h5_file['video_{}'.format(video_idx+1)]['n_frame_per_seg'] = n_frame_per_seg
 
 
 if __name__ == "__main__":
